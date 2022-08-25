@@ -1,15 +1,126 @@
-from turtle import forward
-from typing import Callable, Optional
+from typing import Optional
 import torch.nn as nn, torch
+import math
+
+from ..config import EncoderGeneratorConfig
+from .audio_features import ResNetAudio
+
+
+class TransformerModel(nn.Module):
+
+    def __init__(self, ntoken: int, d_model: int, nhead: int, d_hid: int,
+                 nlayers: int, dropout: float = 0.5):
+        super().__init__()
+        self.model_type = 'Transformer'
+        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        encoder_layers = nn.TransformerEncoderLayer(d_model, nhead, d_hid, dropout)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, nlayers)
+        self.encoder = nn.Embedding(ntoken, d_model)
+        self.d_model = d_model
+        self.decoder = nn.Linear(d_model, ntoken)
+
+        self.init_weights()
+
+    def init_weights(self) -> None:
+        initrange = 0.1
+        self.encoder.weight.data.uniform_(-initrange, initrange)
+        self.decoder.bias.data.zero_()
+        self.decoder.weight.data.uniform_(-initrange, initrange)
+
+    def forward(self, src: torch.Tensor, src_mask: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            src: Tensor, shape [seq_len, batch_size]
+            src_mask: Tensor, shape [seq_len, seq_len]
+
+        Returns:
+            output Tensor of shape [seq_len, batch_size, ntoken]
+        """
+        src = self.encoder(src) * math.sqrt(self.d_model)
+        src = self.pos_encoder(src)
+        output = self.transformer_encoder(src, src_mask)
+        output = self.decoder(output)
+        return output
+
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Tensor, shape [Batch, Sequence, Features]
+        """
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
 
 
 class EncoderGeneratorModel(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, args: EncoderGeneratorConfig) -> None:
         super().__init__()
 
-        # self.audio_feature_extractor = 
-    def forward(self, audio_input, video_input):
-        pass
+        self.audio_feature_extractor = ResNetAudio(
+            layers=args.audio_feature_extractor.layers, #[2, 2, 2, 2]
+            output_depth=args.d_model, # 1024
+            input_filter=args.audio_feature_extractor.input_filter, # 1
+        )
+        self.video_feature_extractor = None # TODO Experiment with video in the future
+
+        self.positional_encoder = PositionalEncoding(
+            d_model=args.d_model,
+            dropout=args.dropout
+        )
+        encoder_layers = nn.TransformerEncoderLayer(
+            d_model=args.d_model,
+            nhead=args.nhead,
+            d_hid=args.d_hid,
+            dropout=args.dropout,
+            batch_first=False
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layers=encoder_layers,
+            nlayers=args.nlayers
+        )
+    
+    def forward(self, audio_input: torch.Tensor, video_input: Optional[torch.Tensor]=None, mask_input: Optional[torch.Tensor]=None):
+        """
+        Args:
+            audio_input: Tensor, shape [Batch, Sequence, Channel, Height, Width]
+            video_input: Tensor, shape [Batch, Sequence, Channel, Height, Width], Optional
+            mask_input: Tensor, shape [Batch, Sequence, Sequence], Optional
+
+        Returns:
+            output Tensor of shape [seq_len, batch_size, ntoken]
+        """
+        # Extract features
+        # TODO: Reshap audio_input -> [Batch*Sequence, Channel, Height, Width]
+        audio_features = self.audio_feature_extractor(audio_input)
+        
+        if self.video_feature_extractor is not None:
+            video_features = self.video_feature_extractor(video_input)
+            features = torch.cat((audio_features, video_features), dim=-1)
+        else:
+            features = audio_features
+            # video_features = torch.empty_like(audio_features, layout=list(audio_features.shape[:-1])+[0])
+        # features = torch.cat((audio_features, video_features), dim=-1)
+
+        # Encode position
+        features = self.positional_encoder(features)
+
+        # Encode sequences
+        output = self.transformer_encoder(features, mask_input)
+
+        return output
 
 
 class QueryGeneratorModel(nn.Module):

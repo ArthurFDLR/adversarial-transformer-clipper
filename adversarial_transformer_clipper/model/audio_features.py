@@ -69,12 +69,12 @@ class BasicBlock(nn.Module):
         return out
 
 
-class ResNet(nn.Module):
+class ResNetAudio(nn.Module):
     def __init__(
         self,
         layers: List[int],
         input_filter: int = 3,
-        num_classes: int = 1000,
+        output_depth: int = 1024,
         zero_init_residual: bool = False,
         groups: int = 1,
         width_per_group: int = 64,
@@ -109,7 +109,7 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(256, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
         self.layer4 = self._make_layer(512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512 * BasicBlock.expansion, num_classes)
+        self.fc = nn.Linear(512 * BasicBlock.expansion, output_depth)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -191,5 +191,5 @@ class ResNet(nn.Module):
         return self._forward_impl(x)
 
 if __name__=="__main__":
-    resnet18_grayscale = ResNet([2, 2, 2, 2], num_classes=1024, input_filter=1)
+    resnet18_grayscale = ResNetAudio([2, 2, 2, 2], output_depth=1024, input_filter=1)
     print(resnet18_grayscale)

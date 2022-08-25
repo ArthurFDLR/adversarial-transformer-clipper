@@ -102,17 +102,21 @@ class EncoderGeneratorModel(nn.Module):
         Returns:
             output Tensor of shape [seq_len, batch_size, ntoken]
         """
-        # Extract features
-        # TODO: Reshap audio_input -> [Batch*Sequence, Channel, Height, Width]
-        audio_features = self.audio_feature_extractor(audio_input)
-        
+        # Extract audio features | (B, S, C, H, W) -> (B*S, C, H, W) -> (B*S, E) -> (B, S, E)
+        audio_features = self.audio_feature_extractor(audio_input.view(-1, *list(audio_input.shape[2:])))
+        audio_features = audio_features.view(*list(audio_input.shape[:2]), -1)
+
+         # Extract video features and concatenate with audio
         if self.video_feature_extractor is not None:
             video_features = self.video_feature_extractor(video_input)
             features = torch.cat((audio_features, video_features), dim=-1)
         else:
             features = audio_features
+
             # video_features = torch.empty_like(audio_features, layout=list(audio_features.shape[:-1])+[0])
         # features = torch.cat((audio_features, video_features), dim=-1)
+
+        # TODO Add padding mechanism (even though it will certainly be useless)
 
         # Encode position
         features = self.positional_encoder(features)

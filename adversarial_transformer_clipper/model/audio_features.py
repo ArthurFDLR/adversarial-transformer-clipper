@@ -29,16 +29,12 @@ class BasicBlock(nn.Module):
         planes: int,
         stride: int = 1,
         downsample: Optional[nn.Module] = None,
-        groups: int = 1,
-        base_width: int = 64,
         dilation: int = 1,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
     ) -> None:
         super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
-        if groups != 1 or base_width != 64:
-            raise ValueError("BasicBlock only supports groups=1 and base_width=64")
         if dilation > 1:
             raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
@@ -76,8 +72,6 @@ class ResNetAudio(nn.Module):
         input_filter: int = 3,
         output_depth: int = 1024,
         zero_init_residual: bool = False,
-        groups: int = 1,
-        width_per_group: int = 64,
         replace_stride_with_dilation: Optional[List[bool]] = None,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
     ) -> None:
@@ -98,8 +92,6 @@ class ResNetAudio(nn.Module):
                 "replace_stride_with_dilation should be None "
                 f"or a 3-element tuple, got {replace_stride_with_dilation}"
             )
-        self.groups = groups
-        self.base_width = width_per_group
         self.conv1 = nn.Conv2d(input_filter, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
@@ -151,7 +143,7 @@ class ResNetAudio(nn.Module):
         layers = []
         layers.append(
             BasicBlock(
-                self.inplanes, planes, stride, downsample, self.groups, self.base_width, previous_dilation, norm_layer
+                self.inplanes, planes, stride, downsample, previous_dilation, norm_layer
             )
         )
         self.inplanes = planes * BasicBlock.expansion
@@ -160,8 +152,6 @@ class ResNetAudio(nn.Module):
                 BasicBlock(
                     self.inplanes,
                     planes,
-                    groups=self.groups,
-                    base_width=self.base_width,
                     dilation=self.dilation,
                     norm_layer=norm_layer,
                 )

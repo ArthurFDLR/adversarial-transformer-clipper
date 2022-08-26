@@ -1,5 +1,6 @@
 from dataclasses import dataclass, asdict, field
-from typing import Optional
+from types import NoneType
+from typing import List, Optional, Union
 
 @dataclass
 class AudioFrameLoaderConfig:
@@ -18,5 +19,17 @@ class AudioFrameLoaderConfig:
         self.wave_frame_length = int(self.sampling_rate//self.frame_rate)
 
 @dataclass
+class ResNetAudioConfig:
+    layers: List[int] = [2, 2, 2, 2]
+    input_filter: int = 1
+    depth: int = 512
+    zero_init_residual: bool = False
+
+@dataclass
 class EncoderGeneratorConfig:
-    test: int
+    audio_feature_extractor: ResNetAudioConfig
+    video_feature_extractor: NoneType = None
+    dropout: float = 0.1
+    num_head: int = 4
+    hidden_depth: int = 256
+    num_layers: int = 3

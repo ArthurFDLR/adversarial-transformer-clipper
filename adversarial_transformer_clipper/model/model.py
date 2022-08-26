@@ -70,26 +70,35 @@ class EncoderGeneratorModel(nn.Module):
         super().__init__()
 
         self.audio_feature_extractor = ResNetAudio(
-            layers=args.audio_feature_extractor.layers, #[2, 2, 2, 2]
-            output_depth=args.d_model, # 1024
-            input_filter=args.audio_feature_extractor.input_filter, # 1
+            layers=args.audio_feature_extractor.layers,
+            input_filter=args.audio_feature_extractor.input_filter,
+            output_depth=args.audio_feature_extractor.depth,
+            zero_init_residual=args.audio_feature_extractor.zero_init_residual,
         )
-        self.video_feature_extractor = None # TODO Experiment with video in the future
+
+        if args.video_feature_extractor is not None:
+            # TODO Experiment with video in the future
+            self.video_feature_extractor = None
+        else:
+            self.video_feature_extractor = None
+            video_feature_depth = 0
+
+        features_depth = args.audio_feature_extractor.depth + video_feature_depth
 
         self.positional_encoder = PositionalEncoding(
-            d_model=args.d_model,
+            d_model=features_depth,
             dropout=args.dropout
         )
         encoder_layers = nn.TransformerEncoderLayer(
-            d_model=args.d_model,
-            nhead=args.nhead,
-            d_hid=args.d_hid,
+            d_model=features_depth,
+            nhead=args.num_head,
+            d_hid=args.hidden_depth,
             dropout=args.dropout,
             batch_first=False
         )
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layers=encoder_layers,
-            nlayers=args.nlayers
+            nlayers=args.num_layers
         )
     
     def forward(self, audio_input: torch.Tensor, video_input: Optional[torch.Tensor]=None, mask_input: Optional[torch.Tensor]=None):
